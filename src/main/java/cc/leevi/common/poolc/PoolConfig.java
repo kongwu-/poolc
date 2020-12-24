@@ -2,17 +2,27 @@ package cc.leevi.common.poolc;
 
 public class PoolConfig {
 
+    private String driverClassName;
+
     private String jdbcUrl;
 
     private String username;
 
     private String password;
 
-    private long maxWait;
+    private long maxWait = -1;
 
-    private int corePoolSize;
+    private int corePoolSize = 8;
 
-    private int maximumPoolSize;
+    private int maximumPoolSize = 16;
+
+    public String getDriverClassName() {
+        return driverClassName;
+    }
+
+    public void setDriverClassName(String driverClassName) {
+        this.driverClassName = driverClassName;
+    }
 
     public String getJdbcUrl() {
         return jdbcUrl;

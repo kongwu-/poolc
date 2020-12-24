@@ -1,278 +1,301 @@
 package cc.leevi.common.poolc;
 
+import cc.leevi.common.poolc.pool.ConnectionPool;
+
 import java.sql.*;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 
-public class ConnectionPooledProxy implements Connection {
+public class ProxyPooledConnection implements Connection {
+
+    private Connection target;
+
+    private ConnectionPool connectionPool;
+
+    public static ProxyPooledConnection createProxyConnection(Connection connection,ConnectionPool connectionPool){
+        ProxyPooledConnection proxyPooledConnection = new ProxyPooledConnection();
+        proxyPooledConnection.setConnectionPool(connectionPool);
+        proxyPooledConnection.setTarget(connection);
+        return proxyPooledConnection;
+    }
+
+    public void setTarget(Connection target) {
+        this.target = target;
+    }
+
+    public void setConnectionPool(ConnectionPool connectionPool) {
+        this.connectionPool = connectionPool;
+    }
+
     @Override
     public Statement createStatement() throws SQLException {
-        return null;
+        return target.createStatement();
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql) throws SQLException {
-        return null;
+        return target.prepareStatement(sql);
     }
 
     @Override
     public CallableStatement prepareCall(String sql) throws SQLException {
-        return null;
+        return target.prepareCall(sql);
     }
 
     @Override
     public String nativeSQL(String sql) throws SQLException {
-        return null;
+        return target.nativeSQL(sql);
     }
 
     @Override
     public void setAutoCommit(boolean autoCommit) throws SQLException {
-
+        target.setAutoCommit(autoCommit);
     }
 
     @Override
     public boolean getAutoCommit() throws SQLException {
-        return false;
+        return target.getAutoCommit();
     }
 
     @Override
     public void commit() throws SQLException {
-
+        target.commit();
     }
 
     @Override
     public void rollback() throws SQLException {
-
+        target.rollback();
     }
 
     @Override
     public void close() throws SQLException {
-
+        //release to the connection pool
+        connectionPool.release(target);
     }
 
     @Override
     public boolean isClosed() throws SQLException {
-        return false;
+        return target.isClosed();
     }
 
     @Override
     public DatabaseMetaData getMetaData() throws SQLException {
-        return null;
+        return target.getMetaData();
     }
 
     @Override
     public void setReadOnly(boolean readOnly) throws SQLException {
-
+        target.setReadOnly(readOnly);
     }
 
     @Override
     public boolean isReadOnly() throws SQLException {
-        return false;
+        return target.isReadOnly();
     }
 
     @Override
     public void setCatalog(String catalog) throws SQLException {
-
+        target.setCatalog(catalog);
     }
 
     @Override
     public String getCatalog() throws SQLException {
-        return null;
+        return target.getCatalog();
     }
 
     @Override
     public void setTransactionIsolation(int level) throws SQLException {
-
+        target.setTransactionIsolation(level);
     }
 
     @Override
     public int getTransactionIsolation() throws SQLException {
-        return 0;
+        return target.getTransactionIsolation();
     }
 
     @Override
     public SQLWarning getWarnings() throws SQLException {
-        return null;
+        return target.getWarnings();
     }
 
     @Override
     public void clearWarnings() throws SQLException {
-
+        target.clearWarnings();
     }
 
     @Override
     public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
-        return null;
+        return target.createStatement(resultSetType,resultSetConcurrency);
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
-        return null;
+        return target.prepareStatement(sql,resultSetType,resultSetConcurrency);
     }
 
     @Override
     public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
-        return null;
+        return target.prepareCall(sql,resultSetType,resultSetConcurrency);
     }
 
     @Override
     public Map<String, Class<?>> getTypeMap() throws SQLException {
-        return null;
+        return target.getTypeMap();
     }
 
     @Override
     public void setTypeMap(Map<String, Class<?>> map) throws SQLException {
-
+        target.setTypeMap(map);
     }
 
     @Override
     public void setHoldability(int holdability) throws SQLException {
-
+        target.setHoldability(holdability);
     }
 
     @Override
     public int getHoldability() throws SQLException {
-        return 0;
+        return target.getHoldability();
     }
 
     @Override
     public Savepoint setSavepoint() throws SQLException {
-        return null;
+        return target.setSavepoint();
     }
 
     @Override
     public Savepoint setSavepoint(String name) throws SQLException {
-        return null;
+        return target.setSavepoint(name);
     }
 
     @Override
     public void rollback(Savepoint savepoint) throws SQLException {
-
+        target.rollback(savepoint);
     }
 
     @Override
     public void releaseSavepoint(Savepoint savepoint) throws SQLException {
-
+        target.releaseSavepoint(savepoint);
     }
 
     @Override
     public Statement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-        return null;
+        return target.createStatement(resultSetType,resultSetConcurrency,resultSetHoldability);
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-        return null;
+        return target.prepareStatement(sql,resultSetType,resultSetConcurrency,resultSetHoldability);
     }
 
     @Override
     public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-        return null;
+        return target.prepareCall(sql,resultSetType,resultSetConcurrency,resultSetHoldability);
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
-        return null;
+        return target.prepareStatement(sql,autoGeneratedKeys);
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
-        return null;
+        return target.prepareStatement(sql,columnIndexes);
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
-        return null;
+        return target.prepareStatement(sql,columnNames);
     }
 
     @Override
     public Clob createClob() throws SQLException {
-        return null;
+        return target.createClob();
     }
 
     @Override
     public Blob createBlob() throws SQLException {
-        return null;
+        return target.createBlob();
     }
 
     @Override
     public NClob createNClob() throws SQLException {
-        return null;
+        return target.createNClob();
     }
 
     @Override
     public SQLXML createSQLXML() throws SQLException {
-        return null;
+        return target.createSQLXML();
     }
 
     @Override
     public boolean isValid(int timeout) throws SQLException {
-        return false;
+        return target.isValid(timeout);
     }
 
     @Override
     public void setClientInfo(String name, String value) throws SQLClientInfoException {
-
+        target.setClientInfo(name,value);
     }
 
     @Override
     public void setClientInfo(Properties properties) throws SQLClientInfoException {
-
+        target.setClientInfo(properties);
     }
 
     @Override
     public String getClientInfo(String name) throws SQLException {
-        return null;
+        return target.getClientInfo(name);
     }
 
     @Override
     public Properties getClientInfo() throws SQLException {
-        return null;
+        return target.getClientInfo();
     }
 
     @Override
     public Array createArrayOf(String typeName, Object[] elements) throws SQLException {
-        return null;
+        return target.createArrayOf(typeName,elements);
     }
 
     @Override
     public Struct createStruct(String typeName, Object[] attributes) throws SQLException {
-        return null;
+        return target.createStruct(typeName,attributes);
     }
 
     @Override
     public void setSchema(String schema) throws SQLException {
-
+        target.setSchema(schema);
     }
 
     @Override
     public String getSchema() throws SQLException {
-        return null;
+        return target.getSchema();
     }
 
     @Override
     public void abort(Executor executor) throws SQLException {
-
+        target.abort(executor);
     }
 
     @Override
     public void setNetworkTimeout(Executor executor, int milliseconds) throws SQLException {
-
+        target.setNetworkTimeout(executor,milliseconds);
     }
 
     @Override
     public int getNetworkTimeout() throws SQLException {
-        return 0;
+        return target.getNetworkTimeout();
     }
 
     @Override
     public <T> T unwrap(Class<T> iface) throws SQLException {
-        return null;
+        return target.unwrap(iface);
     }
 
     @Override
     public boolean isWrapperFor(Class<?> iface) throws SQLException {
-        return false;
+        return target.isWrapperFor(iface);
     }
 }

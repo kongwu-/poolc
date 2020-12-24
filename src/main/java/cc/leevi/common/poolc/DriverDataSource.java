@@ -9,39 +9,59 @@ import java.sql.*;
 import java.util.Properties;
 
 public class DriverDataSource implements DataSource {
-    private static final Logger LOGGER = LoggerFactory.getLogger(com.zaxxer.hikari.util.DriverDataSource.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DriverDataSource.class);
 
     private final String jdbcUrl;
     private final String username;
     private final String password;
-    private Driver driver;
+    private final String driverClassName;
+    private final Driver driver;
 
-    public DriverDataSource(String jdbcUrl, String username, String password)
+    private final Properties info;
+
+    public DriverDataSource(String driverClassName,String jdbcUrl, String username, String password)
     {
+        this.driverClassName = driverClassName;
         this.jdbcUrl = jdbcUrl;
         this.username = username;
         this.password = password;
         try {
-            driver = DriverManager.getDriver(jdbcUrl);
-        } catch (SQLException e) {
-            throw new RuntimeException("initialize jdbc driver failed!",e);
+            info = new Properties();
+
+            if (username != null) {
+                info.put("user", username);
+            }
+            if (password != null) {
+                info.put("password", password);
+            }
+            driver = (Driver) Class.forName(driverClassName).newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException("initialize jdbc driver failed!", e);
         }
     }
 
     public static DriverDataSource createDriverDataSource(PoolConfig poolConfig){
-        return new DriverDataSource(poolConfig.getJdbcUrl(),poolConfig.getUsername(),poolConfig.getPassword());
+        return new DriverDataSource(poolConfig.getDriverClassName(),poolConfig.getJdbcUrl(),poolConfig.getUsername(),poolConfig.getPassword());
     }
 
     @Override
     public Connection getConnection() throws SQLException
     {
-        return driver.connect(jdbcUrl, new Properties());
+        return driver.connect(jdbcUrl,info);
     }
 
     @Override
     public Connection getConnection(final String username, final String password) throws SQLException
     {
-        return driver.connect(jdbcUrl, new Properties());
+        Properties info = new Properties();
+
+        if (username != null) {
+            info.put("user", username);
+        }
+        if (password != null) {
+            info.put("password", password);
+        }
+        return driver.connect(jdbcUrl,info);
     }
 
     @Override
@@ -83,6 +103,6 @@ public class DriverDataSource implements DataSource {
     @Override
     public boolean isWrapperFor(Class<?> iface) throws SQLException
     {
-        return false;
+        throw new SQLFeatureNotSupportedException();
     }
 }
