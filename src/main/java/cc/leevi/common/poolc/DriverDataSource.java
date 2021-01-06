@@ -50,6 +50,13 @@ public class DriverDataSource implements DataSource {
         return driver.connect(jdbcUrl,info);
     }
 
+    /**
+     *
+     * @param username
+     * @param password
+     * @return
+     * @throws SQLException
+     */
     @Override
     public Connection getConnection(final String username, final String password) throws SQLException
     {
