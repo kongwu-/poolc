@@ -10,7 +10,6 @@ import java.sql.SQLException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class DefaultConnectionPool implements ConnectionPool{
 
@@ -22,11 +21,15 @@ public class DefaultConnectionPool implements ConnectionPool{
 
     private int corePoolSize;
 
+    private int connectionCount;
+
+    private int maximumPoolSize;
+
     private PoolConfig poolConfig;
 
     private DriverDataSource driverDataSource;
 
-    private AtomicInteger acquiredCount = new AtomicInteger();
+    private int acquiredCount = 0;
 
     private static final TimeUnit DEFAULT_TIMEUNIT = TimeUnit.MILLISECONDS;
 
@@ -34,42 +37,54 @@ public class DefaultConnectionPool implements ConnectionPool{
         this.poolConfig = poolConfig;
         this.maxWait = poolConfig.getMaxWait();
         this.corePoolSize = poolConfig.getCorePoolSize();
+        this.maximumPoolSize = poolConfig.getMaximumPoolSize();
         this.driverDataSource = DriverDataSource.createDriverDataSource(poolConfig);
         initCorePool();
     }
 
     @Override
-    public Connection acquire() throws InterruptedException {
+    public synchronized Connection acquire() throws InterruptedException {
         Connection idle = pooledQueue.poll(maxWait, DEFAULT_TIMEUNIT);
         if(idle == null){
             throw new RuntimeException("acquire connection from pool timeout!");
         }
-        acquiredCount.incrementAndGet();
+        acquiredCount++;
         return idle;
     }
 
     @Override
-    public void release(Connection connection) {
+    public synchronized void release(Connection connection) {
         pooledQueue.offer(connection);
-        acquiredCount.decrementAndGet();
+        acquiredCount--;
     }
 
     @Override
     public void dump() {
-        logger.info("coreSize: {}, acquiredCount: {}",pooledQueue.size(),acquiredCount.get());
+        logger.info("coreSize: {}, connectionCount: {}, acquiredCount: {}",pooledQueue.size(),connectionCount,acquiredCount);
     }
 
     private Connection openConnection() throws SQLException {
+        if(acquiredCount >= connectionCount && acquiredCount <= maximumPoolSize){
+            return addConnection();
+        }
         return driverDataSource.getConnection();
     }
 
+    private Connection addConnection() throws SQLException {
+        acquiredCount++;
+        return openConnection();
+    }
+
+
+
     public void initCorePool(){
         try {
-            pooledQueue = new ArrayBlockingQueue<>(poolConfig.getMaximumPoolSize());
+            pooledQueue = new ArrayBlockingQueue<>(maximumPoolSize);
             for (int i = 0; i < corePoolSize; i++) {
                 Connection connection = openConnection();
                 pooledQueue.add(connection);
             }
+            connectionCount = corePoolSize;
             logger.info("{} connections added to the connection pool",corePoolSize);
         } catch (SQLException e) {
             logger.error("Open connection failed!",e);
