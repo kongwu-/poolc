@@ -2,6 +2,7 @@ package cc.leevi.common.poolc.pool;
 
 import cc.leevi.common.poolc.DriverDataSource;
 import cc.leevi.common.poolc.PoolConfig;
+import cc.leevi.common.poolc.utils.ConcurrentBag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,13 +16,9 @@ public class DefaultConnectionPool implements ConnectionPool{
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultConnectionPool.class);
 
-    private BlockingQueue<Connection> pooledQueue;
-
     private long maxWait;
 
     private int corePoolSize;
-
-    private int connectionCount;
 
     private int maximumPoolSize;
 
@@ -30,6 +27,8 @@ public class DefaultConnectionPool implements ConnectionPool{
     private DriverDataSource driverDataSource;
 
     private int acquiredCount = 0;
+
+    private ConcurrentBag concurrentBag;
 
     private static final TimeUnit DEFAULT_TIMEUNIT = TimeUnit.MILLISECONDS;
 
@@ -44,7 +43,7 @@ public class DefaultConnectionPool implements ConnectionPool{
 
     @Override
     public synchronized Connection acquire() throws InterruptedException {
-        Connection idle = pooledQueue.poll(maxWait, DEFAULT_TIMEUNIT);
+        ConcurrentBag.ConcurrentBagEntry entry = concurrentBag.borrow(-1, TimeUnit.MILLISECONDS);
         if(idle == null){
             throw new RuntimeException("acquire connection from pool timeout!");
         }
@@ -79,15 +78,22 @@ public class DefaultConnectionPool implements ConnectionPool{
 
     public void initCorePool(){
         try {
-            pooledQueue = new ArrayBlockingQueue<>(maximumPoolSize);
-            for (int i = 0; i < corePoolSize; i++) {
-                Connection connection = openConnection();
-                pooledQueue.add(connection);
+
+            concurrentBag = new ConcurrentBag();
+            for (int i = 0; i < maximumPoolSize; i++) {
+                concurrentBag.add(createPoolEntry());
             }
-            connectionCount = corePoolSize;
+
             logger.info("{} connections added to the connection pool",corePoolSize);
         } catch (SQLException e) {
             logger.error("Open connection failed!",e);
         }
+    }
+
+    private ConcurrentBag.ConcurrentBagEntry createPoolEntry() throws SQLException {
+        Connection connection = openConnection();
+        ConcurrentBag.ConcurrentBagEntry concurrentBagEntry = new ConcurrentBag.ConcurrentBagEntry();
+        concurrentBagEntry.setConnection(connection);
+        return concurrentBagEntry;
     }
 }

@@ -1,18 +1,24 @@
 package cc.leevi.common.poolc.utils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.lang.ref.WeakReference;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
-import static com.zaxxer.hikari.util.ConcurrentBag.IConcurrentBagEntry.STATE_NOT_IN_USE;
-import static java.util.concurrent.TimeUnit.MICROSECONDS;
-import static java.util.concurrent.locks.LockSupport.parkNanos;
+import static cc.leevi.common.poolc.utils.ConcurrentBag.ConcurrentBagEntry.*;
+
 
 public class ConcurrentBag {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConcurrentBag.class);
 
     /**
      * 共享的资源池
@@ -22,6 +28,7 @@ public class ConcurrentBag {
      */
     private final CopyOnWriteArrayList<ConcurrentBagEntry> sharedList;
 
+    private final AtomicInteger waiters;
     /**
      * 线程独享的资源池，释放的资源会添加道独享的资源池
      */
@@ -33,6 +40,7 @@ public class ConcurrentBag {
         this.sharedList = new CopyOnWriteArrayList<>();
         threadList = ThreadLocal.withInitial(() -> new ArrayList<>(16));
         this.handoffQueue = new SynchronousQueue<>(true);
+        waiters = new AtomicInteger();
     }
 
     public ConcurrentBagEntry borrow(long timeout, TimeUnit timeUnit) throws InterruptedException {
@@ -43,30 +51,31 @@ public class ConcurrentBag {
             //移除并获取
             ConcurrentBagEntry entry = entryList.remove(i).get();
             //因为没有锁，所以获取道的资源可能已经被其他线程获取并使用了，使用cas再检查一遍
-            if(entry != null && entry.compareAndSet(ConcurrentBagEntry.STATE_NOT_IN_USE,ConcurrentBagEntry.STATE_IN_USE)){
+            if(entry != null && entry.compareAndSet(STATE_NOT_IN_USE,STATE_IN_USE)){
                 return entry;
             }
         }
-
-        //独享资源池内无法获取，再从共享资源池中获取
-        for (ConcurrentBagEntry entry : sharedList) {
-            if(entry.compareAndSet(ConcurrentBagEntry.STATE_NOT_IN_USE,ConcurrentBagEntry.STATE_IN_USE)){
-                return entry;
+        waiters.getAndIncrement();
+        try {
+            //独享资源池内无法获取，再从共享资源池中获取
+            for (ConcurrentBagEntry entry : sharedList) {
+                if(entry.compareAndSet(STATE_NOT_IN_USE,STATE_IN_USE)){
+                    return entry;
+                }
             }
-        }
 
-        //共享资源池还是没有资源，阻塞线程等待其他线程的释放
-        ConcurrentBagEntry entry = handoffQueue.poll(timeout, timeUnit);
-        return entry;
+            //共享资源池还是没有资源，阻塞线程等待其他线程的释放
+            ConcurrentBagEntry entry = handoffQueue.poll(timeout, timeUnit);
+            return entry;
+        }finally {
+            waiters.getAndDecrement();
+        }
     }
 
     public void requite(ConcurrentBagEntry entry){
         //这里不需要cas，因为还未释放的连接不可能会被其他线程占用
-        entry.setState(ConcurrentBagEntry.STATE_NOT_IN_USE);
+        entry.setState(STATE_NOT_IN_USE);
         //但是修改状态和放回连接池这一步，是非原子的
-
-
-        handoffQueue.offer(entry);
 
         //思路
         //刚释放回连接池的链接，已修改状态为未使用，但未添加到独享资源池中时
@@ -83,29 +92,63 @@ public class ConcurrentBag {
         //此时释放资源时，offer一定是成功吗？是的
         //是不是可以理解为offer和环境是非原子？
         //offer返回false，只会在没有等待者的情况下，那么没有等待者的话，waiters也应该没有吧
-        //换个思路，offer一定会成功，那么只有在该资源被其他线程获取时，才不会唤醒，应该此时该资源是失效状态
+        //换个思路，offer一定会成功，那么只有在该资源被其他线程获取时，才不会唤醒，应该此时该资源是失效状态，暂且忽略offer返回值
         //如果并没有被其他线程获取，那么该资源有效，唤醒线程
         //会存在没有被其他线程获取，同时offer失败的场景吗？
+        //只有再offer中有元素时，offer才会返回false
         for (int i = 0; waiters.get() > 0; i++) {
-            if (bagEntry.getState() != STATE_NOT_IN_USE || handoffQueue.offer(bagEntry)) {
+            if (entry.getState() != STATE_NOT_IN_USE || handoffQueue.offer(entry)) {
                 return;
             }
-            else if ((i & 0xff) == 0xff) {
-                parkNanos(MICROSECONDS.toNanos(10));
-            }
-            else {
-                Thread.yield();
-            }
         }
-
-
-
 
         List<WeakReference<ConcurrentBagEntry>> weakReferenceList = threadList.get();
         weakReferenceList.add(new WeakReference<>(entry));
     }
 
-    public class ConcurrentBagEntry
+
+    public void add(final ConcurrentBagEntry entry){
+        sharedList.add(entry);
+
+        //自旋等待，唤醒等待线程
+        while (waiters.get() >0 && entry.getState() == STATE_NOT_IN_USE && !handoffQueue.offer(entry)){
+            Thread.yield();
+        }
+    }
+
+
+    public boolean remove(final ConcurrentBagEntry entry){
+        if(!entry.compareAndSet(STATE_NOT_IN_USE,STATE_REMOVED)){
+            LOGGER.warn("尝试从资源池中删除一个已占用的资源：{}",entry);
+            return false;
+        }
+
+        final boolean removed = sharedList.remove(entry);
+        if (!removed) {
+            LOGGER.warn("尝试从资源池中删除一个不存在的资源：{}", entry);
+        }
+
+        //这句可能没必要
+        threadList.get().remove(entry);
+
+        return removed;
+    }
+
+    public List<ConcurrentBagEntry> values(int state){
+        return sharedList.stream().filter(e -> e.getState() == state).collect(Collectors.toList());
+    }
+
+    public int getWaitingThreadCount()
+    {
+        return waiters.get();
+    }
+
+    public int size()
+    {
+        return sharedList.size();
+    }
+
+    public static class ConcurrentBagEntry
     {
         /**
          * 空闲
@@ -124,16 +167,26 @@ public class ConcurrentBag {
          */
         public static final int STATE_RESERVED = -2;
 
+        private Connection connection;
+
         private AtomicInteger state = new AtomicInteger(STATE_NOT_IN_USE);
 
         public boolean compareAndSet(int expectState, int newState){
             return state.compareAndSet(expectState,newState);
         }
         void setState(int newState){
-
+            state.set(newState);
         }
         int getState(){
             return state.get();
+        }
+
+        public Connection getConnection() {
+            return connection;
+        }
+
+        public void setConnection(Connection connection) {
+            this.connection = connection;
         }
     }
 
