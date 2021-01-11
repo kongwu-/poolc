@@ -16,6 +16,10 @@ public class PoolConfig {
 
     private int maximumPoolSize = 16;
 
+    private int minimumIdle = maximumPoolSize;
+
+    private long idleTimeout = 3000;
+
     public String getDriverClassName() {
         return driverClassName;
     }
@@ -70,5 +74,21 @@ public class PoolConfig {
 
     public void setMaximumPoolSize(int maximumPoolSize) {
         this.maximumPoolSize = maximumPoolSize;
+    }
+
+    public int getMinimumIdle() {
+        return minimumIdle;
+    }
+
+    public void setMinimumIdle(int minimumIdle) {
+        this.minimumIdle = minimumIdle;
+    }
+
+    public long getIdleTimeout() {
+        return idleTimeout;
+    }
+
+    public void setIdleTimeout(long idleTimeout) {
+        this.idleTimeout = idleTimeout;
     }
 }

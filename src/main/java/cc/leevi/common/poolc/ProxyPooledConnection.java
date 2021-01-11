@@ -1,6 +1,7 @@
 package cc.leevi.common.poolc;
 
 import cc.leevi.common.poolc.pool.ConnectionPool;
+import cc.leevi.common.poolc.utils.ConcurrentBagEntry;
 
 import java.sql.*;
 import java.util.Map;
@@ -11,12 +12,15 @@ public class ProxyPooledConnection implements Connection {
 
     private Connection target;
 
+    private ConcurrentBagEntry poolEntry;
+
     private ConnectionPool connectionPool;
 
-    public static ProxyPooledConnection createProxyConnection(Connection connection,ConnectionPool connectionPool){
+    public static ProxyPooledConnection createProxyConnection(ConcurrentBagEntry poolEntry, ConnectionPool connectionPool){
         ProxyPooledConnection proxyPooledConnection = new ProxyPooledConnection();
         proxyPooledConnection.setConnectionPool(connectionPool);
-        proxyPooledConnection.setTarget(connection);
+        proxyPooledConnection.setTarget(poolEntry.getConnection());
+        proxyPooledConnection.setPoolEntry(poolEntry);
         return proxyPooledConnection;
     }
 
@@ -26,6 +30,14 @@ public class ProxyPooledConnection implements Connection {
 
     public void setConnectionPool(ConnectionPool connectionPool) {
         this.connectionPool = connectionPool;
+    }
+
+    public void setPoolEntry(ConcurrentBagEntry poolEntry) {
+        this.poolEntry = poolEntry;
+    }
+
+    public ConcurrentBagEntry getPoolEntry() {
+        return poolEntry;
     }
 
     @Override
@@ -71,7 +83,7 @@ public class ProxyPooledConnection implements Connection {
     @Override
     public void close() throws SQLException {
         //release to the connection pool
-        connectionPool.release(target);
+        connectionPool.release(this);
     }
 
     @Override
@@ -298,4 +310,6 @@ public class ProxyPooledConnection implements Connection {
     public boolean isWrapperFor(Class<?> iface) throws SQLException {
         return target.isWrapperFor(iface);
     }
+
+
 }

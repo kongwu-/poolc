@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.ref.WeakReference;
-import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -13,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static cc.leevi.common.poolc.utils.ConcurrentBag.ConcurrentBagEntry.*;
+import static cc.leevi.common.poolc.utils.ConcurrentBagEntry.*;
 
 
 public class ConcurrentBag {
@@ -52,6 +51,7 @@ public class ConcurrentBag {
             ConcurrentBagEntry entry = entryList.remove(i).get();
             //因为没有锁，所以获取道的资源可能已经被其他线程获取并使用了，使用cas再检查一遍
             if(entry != null && entry.compareAndSet(STATE_NOT_IN_USE,STATE_IN_USE)){
+                LOGGER.debug("从独享资源池中获取资源：{}",entry);
                 return entry;
             }
         }
@@ -60,10 +60,11 @@ public class ConcurrentBag {
             //独享资源池内无法获取，再从共享资源池中获取
             for (ConcurrentBagEntry entry : sharedList) {
                 if(entry.compareAndSet(STATE_NOT_IN_USE,STATE_IN_USE)){
+                    LOGGER.debug("从共享资源池中获取资源：{}",entry);
                     return entry;
                 }
             }
-
+            LOGGER.debug("暂无可用资源，等待释放或添加新资源。。。");
             //共享资源池还是没有资源，阻塞线程等待其他线程的释放
             ConcurrentBagEntry entry = handoffQueue.poll(timeout, timeUnit);
             return entry;
@@ -75,6 +76,8 @@ public class ConcurrentBag {
     public void requite(ConcurrentBagEntry entry){
         //这里不需要cas，因为还未释放的连接不可能会被其他线程占用
         entry.setState(STATE_NOT_IN_USE);
+        //更新最后访问时间
+        entry.setLastAccess(System.currentTimeMillis());
         //但是修改状态和放回连接池这一步，是非原子的
 
         //思路
@@ -103,6 +106,8 @@ public class ConcurrentBag {
         }
 
         List<WeakReference<ConcurrentBagEntry>> weakReferenceList = threadList.get();
+        //因为独享资源池内的资源，可能已经被回收了，如果此时没有及时的重新检查/获取，那么这个资源在独享资源池里术也属于无用数据，但还是可达的
+        //所以这里使用弱引用，等待GC时可以回收这些不可用资源
         weakReferenceList.add(new WeakReference<>(entry));
     }
 
@@ -148,46 +153,13 @@ public class ConcurrentBag {
         return sharedList.size();
     }
 
-    public static class ConcurrentBagEntry
-    {
-        /**
-         * 空闲
-         */
-        public static final int STATE_NOT_IN_USE = 0;
-        /**
-         * 使用中
-         */
-        public static final int STATE_IN_USE = 1;
-        /**
-         * 已移除
-         */
-        public static final int STATE_REMOVED = -1;
-        /**
-         * 移除中（保留状态）
-         */
-        public static final int STATE_RESERVED = -2;
-
-        private Connection connection;
-
-        private AtomicInteger state = new AtomicInteger(STATE_NOT_IN_USE);
-
-        public boolean compareAndSet(int expectState, int newState){
-            return state.compareAndSet(expectState,newState);
+    public int getCount(int state) {
+        int count = 0;
+        for (ConcurrentBagEntry e : sharedList) {
+            if (e.getState() == state) {
+                count++;
+            }
         }
-        void setState(int newState){
-            state.set(newState);
-        }
-        int getState(){
-            return state.get();
-        }
-
-        public Connection getConnection() {
-            return connection;
-        }
-
-        public void setConnection(Connection connection) {
-            this.connection = connection;
-        }
+        return count;
     }
-
 }

@@ -4,13 +4,17 @@ import cc.leevi.common.poolc.PoolConfig;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
-
-import static org.junit.Assert.*;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DefaultConnectionPoolTest {
 
+    private static Logger logger = LoggerFactory.getLogger(DefaultConnectionPoolTest.class);
 
     private ConnectionPool connectionPool;
 
@@ -19,6 +23,7 @@ public class DefaultConnectionPoolTest {
         PoolConfig poolConfig = new PoolConfig();
         poolConfig.setMaxWait(3000);
         poolConfig.setCorePoolSize(2);
+        poolConfig.setMaximumPoolSize(16);
 
         poolConfig.setDriverClassName("com.mysql.jdbc.Driver");
         poolConfig.setUsername("ipcis_nvhl");
@@ -32,7 +37,7 @@ public class DefaultConnectionPoolTest {
     @Test
     public void acquire() throws InterruptedException {
         for (int i = 0; i < 5; i++) {
-            Connection connection = connectionPool.acquire();
+            Connection connection = connectionPool.getConnection();
             Assert.assertNotNull(connection);
             Assert.assertTrue(connection instanceof Connection);
 
@@ -41,11 +46,30 @@ public class DefaultConnectionPoolTest {
     }
 
     @Test
-    public void release() throws InterruptedException {
-        Connection connection = connectionPool.acquire();
-        connectionPool.release(connection);
+    public void release() throws InterruptedException, SQLException {
+        List<Connection> connectionList = new ArrayList<>();
+        Thread.sleep(6000);
 
-        connectionPool.dump();
+        logger.info("release...");
+        for (Connection connection : connectionList) {
+            connection.close();
+            connectionPool.dump();
+        }
+
+        connectionList.clear();
+        logger.info("release 后的 get ...");
+        for (int i = 0; i < 5; i++) {
+            Connection connection = connectionPool.getConnection();
+            connectionList.add(connection);
+            connectionPool.dump();
+        }
+        logger.info("release...");
+        for (Connection connection : connectionList) {
+            connection.close();
+            connectionPool.dump();
+        }
+
+        connectionList.clear();
     }
 
     @Test

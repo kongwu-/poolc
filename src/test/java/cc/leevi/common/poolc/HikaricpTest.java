@@ -12,6 +12,8 @@ public class HikaricpTest {
         hikariConfig.setJdbcUrl("jdbc:mysql://10.0.3.10:3306/ipcis_nvhl_dcdb?useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&useSSL=false");
         hikariConfig.setUsername("ipcis_nvhl");
         hikariConfig.setPassword("U0x!lRs^kV1");
+        hikariConfig.setMaximumPoolSize(50);
+        hikariConfig.setMinimumIdle(5);
         HikariDataSource hikariDataSource = new HikariDataSource(hikariConfig);
         try {
             Thread.sleep(10000);

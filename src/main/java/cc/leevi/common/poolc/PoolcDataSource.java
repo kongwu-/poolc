@@ -22,7 +22,7 @@ public class PoolcDataSource extends PoolConfig implements DataSource {
     @Override
     public Connection getConnection() throws SQLException {
         try {
-            return ProxyPooledConnection.createProxyConnection(connectionPool.acquire(),connectionPool);
+            return connectionPool.getConnection();
         } catch (InterruptedException e) {
             throw new SQLNonTransientException(e);
         }

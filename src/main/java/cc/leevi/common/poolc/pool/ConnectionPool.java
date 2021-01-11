@@ -4,9 +4,11 @@ import java.sql.Connection;
 
 public interface ConnectionPool {
 
-    Connection acquire() throws InterruptedException;
+    Connection getConnection() throws InterruptedException;
 
     void release(Connection connection);
 
     void dump();
+
+    void shutdown();
 }
