@@ -15,17 +15,15 @@ import java.util.List;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import static com.zaxxer.hikari.util.ConcurrentBag.IConcurrentBagEntry.STATE_NOT_IN_USE;
+import static cc.leevi.common.poolc.utils.ConcurrentBagEntry.*;
 
-public class DefaultConnectionPool implements ConnectionPool {
+public class DefaultConnectionPool extends PoolConfig implements ConnectionPool {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultConnectionPool.class);
 
     private static final long HOUSE_KEEPING_PERIOD_MS = TimeUnit.SECONDS.toMillis(30);
 
     private int maximumPoolSize;
-
-    PoolConfig poolConfig;
 
     private DriverDataSource driverDataSource;
 
@@ -34,7 +32,6 @@ public class DefaultConnectionPool implements ConnectionPool {
     private ScheduledThreadPoolExecutor houseKeeperTaskExecutor;
 
     public DefaultConnectionPool(PoolConfig poolConfig) {
-        this.poolConfig = poolConfig;
         this.maximumPoolSize = poolConfig.getMaximumPoolSize();
         this.driverDataSource = DriverDataSource.createDriverDataSource(poolConfig);
         this.concurrentBag = new ConcurrentBag();
@@ -45,7 +42,7 @@ public class DefaultConnectionPool implements ConnectionPool {
 
     @Override
     public Connection getConnection() throws InterruptedException {
-        return getConnection(poolConfig.getMaxWait(), TimeUnit.MILLISECONDS);
+        return getConnection(getMaxWait(), TimeUnit.MILLISECONDS);
     }
 
     public Connection getConnection(long hardTimeout, TimeUnit timeUnit) throws InterruptedException {
@@ -138,9 +135,9 @@ public class DefaultConnectionPool implements ConnectionPool {
 
         //需要补充的连接数量
         //优先使用minIdle，若minIdle和maxPoolSize不相等，那么连接池拥有"扩容"的功能，如果相等，那么是一个一直充满的"固定大小"的连接池
-        int connectionsToAdd = Math.min(poolConfig.getMaximumPoolSize() - getTotalConnections(), poolConfig.getMinimumIdle() - getIdleConnections());
+        int connectionsToAdd = Math.min(getMaximumPoolSize() - getTotalConnections(), getMinimumIdle() - getIdleConnections());
         if (connectionsToAdd <= 0) {
-            logger.debug("无需填充连接池，连接池目前很健康，空闲连接数大于minimumIdle[{}]", poolConfig.getMinimumIdle());
+            logger.debug("无需填充连接池，连接池目前很健康，空闲连接数大于minimumIdle[{}]", getMinimumIdle());
         }
         for (int i = 0; i < connectionsToAdd; i++) {
             ConcurrentBagEntry poolEntry = createPoolEntry();
@@ -168,10 +165,10 @@ public class DefaultConnectionPool implements ConnectionPool {
 
         @Override
         public void run() {
-            final long idleTimeout = poolConfig.getIdleTimeout();
+            final long idleTimeout = getIdleTimeout();
             try {
-                List<ConcurrentBagEntry> idleConnections = concurrentBag.values(ConcurrentBagEntry.STATE_NOT_IN_USE);
-                int toRemove = idleConnections.size() - poolConfig.getMinimumIdle();
+                List<ConcurrentBagEntry> idleConnections = concurrentBag.values(STATE_NOT_IN_USE);
+                int toRemove = idleConnections.size() - getMinimumIdle();
                 for (ConcurrentBagEntry idleConnection : idleConnections) {
                     //删除超时的链接
                     if (toRemove > 0 && System.currentTimeMillis() - idleConnection.getLastAccess() >= idleTimeout) {
